@@ -1,3 +1,4 @@
 /.gradle/
 /test-utils/build/
 /test-utils/.clover/
+/.nb-gradle/

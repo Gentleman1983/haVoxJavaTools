@@ -1,44 +1,135 @@
-//
-// This file is to be applied to every subproject.
-//
-
-apply plugin: 'java'
-apply plugin: 'maven'
-
-String mavenGroupId = 'net.havox.java'
-String mavenVersion = '1.0.0-SNAPSHOT'
+// This file is to be applied to every project.
+configurations {
+    testArtifacts.extendsFrom testRuntime
+}
 
 sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+apply plugin: 'groovy'
+apply plugin: 'java'
+apply plugin: 'jacoco'
+apply plugin: 'kotlin'
+apply plugin: 'maven'
+apply plugin: 'maven-publish'
+
 [compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
 
 repositories {
-    mavenCentral();
-    // You may define additional repositories, or even remove "mavenCentral()".
-    // Read more about repositories here:
-    //   http://www.gradle.org/docs/current/userguide/dependency_management.html#sec:repositories
+    maven {
+        url "${reporitory_url}/${repository_public}"
+        credentials {
+            username = "${repository_user}"
+            password = "${repository_password}"
+        
+        }
+    }
+    mavenCentral()
+    jcenter()
 }
 
 dependencies {
     // Adding dependencies here will add the dependencies to each subproject.
-    testCompile group: 'junit', name: 'junit', version: '4.10'
+    testCompile group: 'junit', name: 'junit', version: project.ext.'libraryVersion.junit.junit'
+    testCompile group: 'org.hamcrest', name: 'hamcrest-junit', version: project.ext.'libraryVersion.hamcrest.hamcrest'
+    testCompile group: 'org.mockito', name: 'mockito-core', version: project.ext.'libraryVersion.mockito.mockito'
+}
+
+test {
+    reports {
+        junitXml.enabled = true
+        html.enabled = true
+    }
+    jacoco {
+        append=true
+        destinationFile = file( "${rootProject.buildDir}/jacoco/combinedJacocoTest.exec" )
+    }
+}
+
+jacoco {
+    toolVersion = project.ext.'gradlePluginVersion.jacoco.toolVersion'
+}
+
+jacocoTestReport {
+    additionalSourceDirs = files(sourceSets.main.allSource.srcDirs)
+    sourceDirectories = files(sourceSets.main.allSource.srcDirs)
+    classDirectories =  files(sourceSets.main.output)
+    reports {
+        html.enabled = true
+        xml.enabled = true
+        csv.enabled = false
+    }
 }
 
 String mavenArtifactId = name
+group = project.ext.mavenGroupId
+version = project.ext.mavenVersion
+// Append suffix '-SNAPSHOT' if it is a snapshot release...
+if ( !project.hasProperty( 'typeOfRelease' ) || project.ext.typeOfRelease.equalsIgnoreCase( 'SNAPSHOT' ) ) {
+    version += '-SNAPSHOT'
+}
 
-group = mavenGroupId
-version = mavenVersion
-
-task sourcesJar(type: Jar, dependsOn: classes, description: 'Creates a jar from the source files.') {
+task sourcesJar( type: Jar, dependsOn: classes, description: 'Creates a jar from the source files.' ) {
     classifier = 'sources'
     from sourceSets.main.allSource
 }
 
-artifacts {
-    archives jar
-    archives sourcesJar
+task javadocJar( type: Jar, dependsOn: 'javadoc', description: 'Creates a jar from the JavaDoc files.' ) {
+    from javadoc.destinationDir
+    classifier = 'javadoc'
 }
 
-configure(install.repositories.mavenInstaller) {
+task testJar(type: Jar) {
+    classifier "test"
+    from sourceSets.test.output
+}
+
+artifacts {
+    archives jar
+    archives javadocJar
+    archives sourcesJar
+    
+    testArtifacts testJar
+}
+
+publishing {
+    def repoKey = ''
+    
+    if ( !project.hasProperty( 'typeOfRelease' ) || project.ext.typeOfRelease.equalsIgnoreCase( 'SNAPSHOT' ) ) {
+        repoKey = 'snapshot'
+    }
+    else if ( project.ext.typeOfRelease.equalsIgnoreCase( 'RELEASE' ) ) {
+        repoKey = 'release'
+    }
+    
+    repositories {
+        
+        maven {
+            name repoKey
+            credentials {
+                username repository_user
+                password repository_password
+            }
+            if ( !project.hasProperty( 'typeOfRelease' ) || project.ext.typeOfRelease.equalsIgnoreCase( 'SNAPSHOT' ) ) {
+                url "${reporitory_url}/${repository_snapshots}"
+            }
+            else if ( project.ext.typeOfRelease.equalsIgnoreCase( 'RELEASE' ) ) {
+                url "${reporitory_url}/${repository_releases}"
+            }
+        }
+    }
+    
+    publications {
+        mavenJava( MavenPublication ) {
+            from components.java
+
+            artifact sourcesJar
+            artifact javadocJar
+        }
+    }
+}
+
+configure( install.repositories.mavenInstaller ) {
     pom.project {
         groupId = mavenGroupId
         artifactId = mavenArtifactId
@@ -46,9 +137,9 @@ configure(install.repositories.mavenInstaller) {
     }
 }
 
-task createFolders(description: 'Creates the source folders if they do not exist.') doLast {
+task createFolders( description: 'Creates the source folders if they do not exist.' ) doLast {
     sourceSets*.allSource*.srcDirs*.each { File srcDir ->
-        if (!srcDir.isDirectory()) {
+        if ( !srcDir.isDirectory() ) {
             println "Creating source folder: ${srcDir}"
             srcDir.mkdirs()
         }

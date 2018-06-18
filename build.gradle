@@ -1,20 +1,104 @@
 import org.gradle.api.artifacts.*
 
-apply plugin: 'base' // To add "clean" task to the root project.
-
-subprojects {
-    apply from: rootProject.file('common.gradle')
+if ( !project.hasProperty( 'typeOfRelease' ) || ( !project.ext.typeOfRelease.equalsIgnoreCase( 'SNAPSHOT' ) && !project.ext.typeOfRelease.equalsIgnoreCase( 'SNAPSHOT' ) ) ) {
+    println( "No valid type of release selected. Please add parameter 'typeOfRelease' with values 'SNAPSHOT' for snapshot release or 'RELEASE' for productive release." )
 }
 
-task mergedJavadoc(type: Javadoc, description: 'Creates Javadoc from all the projects.') {
+buildscript {
+    repositories {
+        maven {
+            url "${reporitory_url}/${repository_public}"
+            credentials {
+                username = "${repository_user}"
+                password = "${repository_password}"
+        
+            }
+        }
+        mavenCentral()
+        jcenter()
+    }
+    dependencies {
+        classpath "org.sonarsource.scanner.gradle:sonarqube-gradle-plugin:${project.ext.'gradlePluginVersion.sonarsource.sonarqube-gradle-plugin'}"
+        classpath "org.jfrog.buildinfo:build-info-extractor-gradle:${project.ext.'gradlePluginVersion.jfrog.build-info-extractor-gradle'}"
+        classpath ("org.liquibase:liquibase-gradle-plugin:${project.ext.'gradlePluginVersion.liquibase.liquibase-gradle-plugin'}") {
+            exclude(module: 'liquibase-core') // <-- the liquibase core 3.4.2 is outdated | Release: 24-Nov-2015 -> Current 3.5.3 | Release: 13-Oct-2016
+        }
+        classpath 'org.liquibase:liquibase-core:3.5.3'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:${project.ext.'gradlePluginVersion.kotlin.kotlin-gradle-plugin'}"
+    }
+}
+
+apply plugin: 'base' // To add "clean" task to the root project.
+apply plugin: 'org.sonarqube'
+
+allprojects {
+    apply from: rootProject.file( 'common.gradle' )
+    
+    // Run JaCoCo test reports before triggering SonarQube analysis.
+    rootProject.tasks.sonarqube.dependsOn jacocoTestReport
+}
+
+// Print build information...
+println '***********************************************************'
+println '* Build environment information:'
+println '* =============================='
+println "* Gradle wrapper version: ${GradleVersion.current().getVersion()}"
+println "* Groovy version: ${GroovySystem.getVersion()}"
+println "* JDK version: ${JavaVersion.current()} (${System.getProperty( 'java.version' )})"
+println "* Kotlin version: ${project.ext.'gradlePluginVersion.kotlin.kotlin-gradle-plugin'}"
+println "* Source compatibility: ${project.sourceCompatibility}"
+println "* Target compatibility: ${project.targetCompatibility}"
+println '*'
+println '* MAVEN artifact information:'
+println '* ==========================='
+println "* Group ID: ${project.group}"
+println "* Artifact ID: ${project.name}"
+println "* Version: ${project.version}"
+println '***********************************************************'
+
+task mergedJavadoc( type: Javadoc, description: 'Creates Javadoc from all the projects.' ) {
     title = 'All modules'
-    destinationDir = new File(project.buildDir, 'merged-javadoc')
+    destinationDir = new File( project.buildDir, 'merged-javadoc' )
 
     // Note: The closures below are executed lazily.
     source {
-       subprojects*.sourceSets*.main*.allSource
+        subprojects*.sourceSets*.main*.allSource
     }
     classpath.from {
-        subprojects*.configurations*.compile*.copyRecursive({ !(it instanceof ProjectDependency); })*.resolve()
+        subprojects*.configurations*.compile*.copyRecursive( { !( it instanceof ProjectDependency ); } )*.resolve()
+    }
+}
+
+task jacocoAllProjectsTestReport(type: JacocoReport) {
+    description 'Creates a unified JaCoCo test report for the project.'
+    
+    // Gather execution data from all subprojects
+    // (change this if you e.g. want to calculate unit test/integration test coverage separately)
+    executionData fileTree(project.rootDir.absolutePath).include("**/build/jacoco/*.exec")
+
+    // Add all relevant sourcesets from the subprojects 
+    subprojects.each {
+        sourceSets it.sourceSets.main
+    }
+
+    reports {
+        xml.enabled true
+        html.enabled true
+        csv.enabled false
+    }
+}
+// always run the tests before generating the report
+jacocoAllProjectsTestReport.dependsOn {
+    subprojects*.test
+}
+tasks.sonarqube.dependsOn jacocoAllProjectsTestReport
+
+task wrapper(type: Wrapper) {
+    gradleVersion = '4.5'
+}
+
+sonarqube {
+    properties {
+        property "sonar.jacoco.reportPath", "${buildDir}/jacoco/*.exec"
     }
 }
