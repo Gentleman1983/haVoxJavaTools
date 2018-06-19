@@ -140,7 +140,7 @@ public class ModelRandomGeneratorTest
   {
     double expectedMinValue = 0.0d;
     double expectedMaxValue = 1.0d;
-    double randomDouble = ModelRandomGenerator.randomFloat();
+    double randomDouble = ModelRandomGenerator.randomDouble();
 
     this.checkRandomDouble( randomDouble, expectedMinValue, expectedMaxValue );
   }
