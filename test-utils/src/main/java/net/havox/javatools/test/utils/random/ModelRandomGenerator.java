@@ -61,7 +61,22 @@ public class ModelRandomGenerator
 
   public static int randomIntInRange( int min, int max )
   {
-    return randomInt( max - min + 1 ) + min;
+    int result;
+    int bound = ( max - min + 1 );
+    if ( bound > 0 )
+    {
+      result = randomInt( bound ) + min;
+    }
+    else
+    { // Bound calculation caused int overflow.
+      do
+      {
+        result = randomInt();
+      }
+      while ( result < min || result > max );
+    }
+
+    return result;
   }
 
   public static long randomLong()
