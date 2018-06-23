@@ -4,3 +4,7 @@
 /.nb-gradle/
 /build/
 /common-utils/build/
+/haVox_utils_common_data/build/
+/haVox_java_utils_common_data/build/
+/havox_java_utils_test/build/
+/haVox_java_utils_test/build/
